@@ -4,15 +4,20 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "instrumentation.h"
+#define PERFORMANCE
+
 #define print(...) printf(__VA_ARGS__)
 
-#define M 128
-#define N 128
+#define M 64
+#define N 64
 
-// TOTO:
+// TODO:
+// Priority queue (binary heap)
 // Free list
 // Cashe alloc
-// uint8_t for int, float  for double
+// int16_t for int
+// Float for double, calculate z as c * x and keep track of c
 
 // degub ldb
 
@@ -21,17 +26,18 @@ typedef struct simplex_t simplex_t;
 typedef struct node_t node_t;
 typedef struct list_node_t list_node_t;
 
+simplex_t simplex_list[1000];
+node_t node_list[1000];
+
 // FUNCTION HEADERS
-double xsimplex(int m, int n, double** a, double* b, double* c, double* x, double y, int* var, int h);
-double simplex(int m, int n, double** a, double* b, double* c, double* x, double y);
-int sum_int_array(int* arr, int length);
-double sum_double_array(double* arr, int length);
+double xsimplex(int16_t m, int16_t n, double** a, double* b, double* c, double* x, double y, int16_t* var, int16_t h);
+double simplex(int16_t m, int16_t n, double** a, double* b, double* c, double* x, double y);
 
 // STRUCTS
 struct simplex_t {
-    int m;          /* Constraints. */
-    int n;          /* Decision variables. */
-    int* var;       /* var[n+m+1] 0..n-1 are nonbasic. */
+    int16_t m;          /* Constraints. */
+    int16_t n;          /* Decision variables. */
+    int16_t* var;       /* var[n+m+1] 0..n-1 are nonbasic. */
     double** a;     /* A. */
     double* b;      /* b. */
     double* x;      /* x[n+1] x. */
@@ -40,10 +46,10 @@ struct simplex_t {
 };
 
 struct node_t {
-    int m;          /* Constraints. */
-    int n;          /* Decision variables. */
-    int k;          /* Parent branches on x_k. */
-    int h;          /* Branch on x_h. */
+    int16_t m;          /* Constraints. */
+    int16_t n;          /* Decision variables. */
+    int16_t k;          /* Parent branches on x_k. */
+    int16_t h;          /* Branch on x_h. */
     double xh;      /* x_h. */
     double ak;      /* Parent a_k. */
     double bk;      /* Parent b_k. */
@@ -64,7 +70,7 @@ struct list_node_t {
 
 //FREE FUNCTIONS
 void free_simplex(simplex_t* simplex) {
-    for (int i = 0; i < simplex->m; i++) {
+    for (int16_t i = 0; i < simplex->m; i++) {
         free(simplex->a[i]);
     }
     free(simplex->a);
@@ -76,7 +82,7 @@ void free_simplex(simplex_t* simplex) {
 }
 
 void free_node(node_t* node) {
-    for (int i = 0; i < node->m+1; i++) {
+    for (int16_t i = 0; i < node->m+1; i++) {
         free(node->a[i]);
     }
     free(node->a);
@@ -88,49 +94,10 @@ void free_node(node_t* node) {
     free(node);
 }
 
-int sum_int_array(int* arr, int length) {
-    int sum = 0;
-    for (int i = 0; i < length; i++) {
-        sum += arr[i];
-    }
-    return sum;
-}
-
-double sum_double_array(double* arr, int length) {
-    double sum = 0;
-    for (int i = 0; i < length; i++) {
-        sum += arr[i];
-    }
-    return sum;
-}
-
-void print_int_array(int *arr, int size) {
-    for (int i = 0; i < size; i++) {
-        printf("[%d]: %d\t", i, arr[i]);
-    }
-    printf("\n");
-}
-
-void print_double_array(double *arr, int size) {
-    for (int i = 0; i < size; i++) {
-        printf("[%d]: %.3lf\t", i, arr[i]);
-    }
-    printf("\n");
-}
-
-void print_matrix(double **matrix, int rows, int cols) {
-    for (int i = 0; i < rows; i++) {
-        for (int j = 0; j < cols; j++) {
-            printf("%10.3lf\t", matrix[i][j]);
-        }
-        printf("\n");
-    }
-}
-
-node_t* initial_node(int m, int n, double** a, double* b, double* c) {
+node_t* initial_node(int16_t m, int16_t n, double** a, double* b, double* c) {
     struct node_t* p = calloc(1, sizeof(struct node_t));
     p->a = calloc(m+1, sizeof(double*));
-    for (int i = 0; i < m+1; i++) {
+    for (int16_t i = 0; i < m+1; i++) {
         p->a[i] = calloc(n+1, sizeof(double));
     }
 
@@ -142,14 +109,14 @@ node_t* initial_node(int m, int n, double** a, double* b, double* c) {
     p->m = m;
     p->n = n;
 
-    for (int i = 0; i < m; i++) {
-        for (int j = 0; j < n; j++) {
+    for (int16_t i = 0; i < m; i++) {
+        for (int16_t j = 0; j < n; j++) {
             p->a[i][j] = a[i][j];
         }
         p->b[i] = b[i];
     }
 
-    for (int i = 0; i < n; i++) {
+    for (int16_t i = 0; i < n; i++) {
         p->c[i] = c[i];
         p->min[i] = -INFINITY;
         p->max[i] = INFINITY;
@@ -158,9 +125,9 @@ node_t* initial_node(int m, int n, double** a, double* b, double* c) {
     return p;
 }
 
-node_t* extend(node_t* p, int m, int n, double** a, double* b, double* c, int k, double ak, double bk) {
+node_t* extend(node_t* p, int16_t m, int16_t n, double** a, double* b, double* c, int16_t k, double ak, double bk) {
     struct node_t* q = calloc(1, sizeof(struct node_t));
-    int i, j;
+    int16_t i, j;
     q->k = k;
     q->ak = ak;
     q->bk = bk;
@@ -177,7 +144,7 @@ node_t* extend(node_t* p, int m, int n, double** a, double* b, double* c, int k,
     q->h = -1;
 
     q->a = calloc(q->m+1, sizeof(double*));
-    for (int i = 0; i < q->m+1; i++) {
+    for (int16_t i = 0; i < q->m+1; i++) {
         q->a[i] = calloc(q->n+1, sizeof(double));
     }
 
@@ -239,7 +206,7 @@ int is_integer(double* xp) {
 }
 
 int integer(node_t* p) {
-    for (int i = 0; i < p->n; i++) {
+    for (int16_t i = 0; i < p->n; i++) {
         if (!is_integer(&p->x[i])) {
             return 0;
         }
@@ -251,7 +218,7 @@ void bound(node_t* p, list_node_t** h, double* zp, double* x) {
     if (p->z > *zp) {
         *zp = p->z;
 
-        for (int i = 0; i < p->n; i++) {
+        for (int16_t i = 0; i < p->n; i++) {
             p->x[i] = x[i];
         }
 
@@ -293,9 +260,9 @@ int branch(node_t* q, double z) {
     }
 
     double integer_part = 0;
-    int best_h = 0;
+    int16_t best_h = 0;
     double best_fractional = INFINITY;
-    for (int h = 0; h < q->n; h++) {
+    for (int16_t h = 0; h < q->n; h++) {
         if (!is_integer(&q->x[h])) {
             // fabs(modf(q->x[h], &integer_part) - 0.5) < 0.1
             // printf("TEST: %lf %lf\n", q->x[h], modf(q->x[h], &integer_part));
@@ -320,7 +287,7 @@ int branch(node_t* q, double z) {
         q->h = best_h;
         q->xh = q->x[best_h];
 
-        for (int i = 0; i < q->m+1; i++) {
+        for (int16_t i = 0; i < q->m+1; i++) {
             free(q->a[i]);
         }
         free(q->a);
@@ -333,7 +300,7 @@ int branch(node_t* q, double z) {
     return 0;
 }
 
-void succ(node_t* p, list_node_t** h, int m, int n, double** a, double* b, double* c, int k, int ak, int bk, double* zp, double* x) {
+void succ(node_t* p, list_node_t** h, int16_t m, int16_t n, double** a, double* b, double* c, int16_t k, int16_t ak, int16_t bk, double* zp, double* x) {
     node_t* q = extend(p, m, n, a, b, c, k, ak, bk);
     if (q == NULL) {
         return;
@@ -358,8 +325,8 @@ void succ(node_t* p, list_node_t** h, int m, int n, double** a, double* b, doubl
     free_node(q);
 }
 
-int init(simplex_t* s, int m, int n, double** a, double* b, double* c, double* x, double y, int* var) {
-    int i, k;
+int init(simplex_t* s, int16_t m, int16_t n, double** a, double* b, double* c, double* x, double y, int16_t* var) {
+    int16_t i, k;
 
     s->m = m;
     s->n = n;
@@ -371,7 +338,7 @@ int init(simplex_t* s, int m, int n, double** a, double* b, double* c, double* x
     s->var = var;
 
     if(s->var == NULL){
-        s->var = calloc(m+n+1, sizeof(int));
+        s->var = calloc(m+n+1, sizeof(int16_t));
         for (i=0; i < m + n; i++){
             s->var[i] = i;
         }
@@ -387,7 +354,7 @@ int init(simplex_t* s, int m, int n, double** a, double* b, double* c, double* x
 }
 
 int select_nonbasic(simplex_t s) {
-    // for (int i = 0; i < s.n; i++) {
+    // for (int16_t i = 0; i < s.n; i++) {
     //     if (s.c[i] > 1e-6) {
     //         return i;
     //     }
@@ -395,8 +362,8 @@ int select_nonbasic(simplex_t s) {
     // return -1;
 
     // Max c[i]:
-    int idx_max = 0;
-    for (int i = 1; i < s.n; i++) {
+    int16_t idx_max = 0;
+    for (int16_t i = 1; i < s.n; i++) {
         if (s.c[i] > 1e-6 && s.c[i] > s.c[idx_max]) {
             idx_max = i;
         }
@@ -407,10 +374,10 @@ int select_nonbasic(simplex_t s) {
 
     // Steepest edge
     // double max_edge = -1;
-    // int idx_max = 0;
-    // for (int i = 0; i < s.n; i++) {
+    // int16_t idx_max = 0;
+    // for (int16_t i = 0; i < s.n; i++) {
     //     double sum = 0;
-    //     for (int j = 0; j < s.m; j++) {
+    //     for (int16_t j = 0; j < s.m; j++) {
     //         sum += pow(s.a[j][i], 2);
     //     }
     //     sum = s.c[i] / sqrt(sum + 1);
@@ -427,17 +394,19 @@ int select_nonbasic(simplex_t s) {
     // return -1;
 }
 
-inline __attribute__((always_inline)) void pivot(simplex_t* s, int row, int col) {
+// inline __attribute__((always_inline))
+void pivot(simplex_t* s, int16_t row, int16_t col) {
+    //BENCHMARK_BEGIN(pivot);
     double** a = s->a;
     double* b = s->b;
     double* c = s->c;
-    int m = s->m;
-    int n = s->n;
-    int i, j, t;
-
-    const int folds = 8;
+    int16_t m = s->m;
+    int16_t n = s->n;
+    int16_t i, j, t;
 
     double a_rc = 1/a[row][col];
+
+    // const int16_t FOLDS = 4;
     
     t = s->var[col];
     s->var[col] = s->var[n+row];
@@ -451,7 +420,7 @@ inline __attribute__((always_inline)) void pivot(simplex_t* s, int row, int col)
     //    c[i] = c[i] - c[col] * a[row][i] * a_rc;
     //}
     double c_temp = c[col];
-    #pragma GCC unroll folds
+    #pragma GCC unroll(4)
     for (i = 0; i < n; i++) {
         c[i] = c[i] - c_temp * a[row][i] * a_rc;
     }
@@ -466,7 +435,7 @@ inline __attribute__((always_inline)) void pivot(simplex_t* s, int row, int col)
     //     b[i] = b[i] - a[i][col] * b[row] * a_rc;
     // }
     double b_temp = b[row];
-    #pragma GCC unroll folds
+    #pragma GCC unroll(4)
     for (i = 0; i < m; i++) {
         b[i] = b[i] - a[i][col] * b_temp * a_rc;
     }
@@ -490,7 +459,7 @@ inline __attribute__((always_inline)) void pivot(simplex_t* s, int row, int col)
     //}
     for (i = 0; i < row; i++) {
         double a_temp = a[i][col];
-        #pragma GCC unroll folds
+        #pragma GCC unroll(4)
         for (j = 0; j < n; j++) {
             a[i][j] = a[i][j] - a_temp * a[row][j] * a_rc;
         }
@@ -498,7 +467,7 @@ inline __attribute__((always_inline)) void pivot(simplex_t* s, int row, int col)
     }
     for (i = row + 1; i < m; i++) {
         double a_temp = a[i][col];
-        #pragma GCC unroll folds
+        #pragma GCC unroll(4)
         for (j = 0; j < n; j++) {
             a[i][j] = a[i][j] - a_temp * a[row][j] * a_rc;
         }
@@ -517,12 +486,13 @@ inline __attribute__((always_inline)) void pivot(simplex_t* s, int row, int col)
     a[row][col] = temp_a;
     b[row] = b[row] * a_rc;
     a[row][col] = 1 * a_rc;
+    //BENCHMARK_END_INTERVALL(pivot, 100000);
 }
 
-void prepare(simplex_t* s, int k) {
-    int m = s->m;
-    int n = s->n;
-    int i;
+void prepare(simplex_t* s, int16_t k) {
+    int16_t m = s->m;
+    int16_t n = s->n;
+    int16_t i;
 
     for (i = m+n; i > n; i--) {
         s->var[i] = s->var[i-1];
@@ -542,8 +512,8 @@ void prepare(simplex_t* s, int k) {
     pivot(s, k, n-1);
 }
 
-int initial(simplex_t* s, int m, int n, double** a, double* b, double* c, double* x, double y, int* var) {
-    int i, j, k;
+int initial(simplex_t* s, int16_t m, int16_t n, double** a, double* b, double* c, double* x, double y, int16_t* var) {
+    int16_t i, j, k;
     double w;
     k = init(s, m, n, a, b, c, x, y, var);
 
@@ -631,9 +601,9 @@ int initial(simplex_t* s, int m, int n, double** a, double* b, double* c, double
     return 1;
 }
 
-double xsimplex(int m, int n, double** a, double* b, double* c, double* x, double y, int* var, int h) {
+double xsimplex(int16_t m, int16_t n, double** a, double* b, double* c, double* x, double y, int16_t* var, int16_t h) {
     simplex_t s;
-    int i, row, col;
+    int16_t i, row, col;
 
     if (!initial(&s, m, n, a, b, c, x, y, var)) {
         free(s.var);
@@ -680,11 +650,11 @@ double xsimplex(int m, int n, double** a, double* b, double* c, double* x, doubl
     return s.y;
 }
 
-double simplex(int m, int n, double** a, double* b, double* c, double* x, double y) {
+double simplex(int16_t m, int16_t n, double** a, double* b, double* c, double* x, double y) {
     return xsimplex(m, n, a, b, c, x, y, NULL, 0);
 }
 
-double intopt(int m, int n, double** a, double* b, double* c, double* x) {
+double intopt(int16_t m, int16_t n, double** a, double* b, double* c, double* x) {
     node_t* p = initial_node(m, n, a, b, c);
     list_node_t* h = calloc(1, sizeof(struct list_node_t));
     h->data = p;
@@ -694,7 +664,7 @@ double intopt(int m, int n, double** a, double* b, double* c, double* x) {
     if (integer(p) || !isfinite(p->z)) {
         z = p->z;
         if (integer(p)) {
-            for (int i = 0; i < p->n; i++) {
+            for (int16_t i = 0; i < p->n; i++) {
                 x[i] = p->x[i];
             }
             free_node(p);
@@ -725,44 +695,44 @@ double intopt(int m, int n, double** a, double* b, double* c, double* x) {
     }
 }
 
-//#define MAIN
-#ifdef MAIN
+// #define INCLUDE_MAIN
+#ifdef INCLUDE_MAIN
 int main(int argc, char const *argv[])
 {
-    int m;
-    int n;
+    int16_t m;
+    int16_t n;
 
     scanf("%d %d\n", &m, &n);
     // printf("m = %d, n = %d\n", m, n);
 
     double** a;
     a = calloc(m, sizeof(double*));
-    for (int i = 0; i < m; i++) {
+    for (int16_t i = 0; i < m; i++) {
         a[i] = calloc(n+1, sizeof(double));
     }
 
     double* c = calloc(n, sizeof(double));
     double* b = calloc(m, sizeof(double));
     
-    for (int ic = 0; ic < n; ic++) {
+    for (int16_t ic = 0; ic < n; ic++) {
         scanf("%lf", &c[ic]);
     }
     scanf("\n");
 
-    for (int i = 0; i < m; i++) {
-        for (int j = 0; j < n; j++) {
+    for (int16_t i = 0; i < m; i++) {
+        for (int16_t j = 0; j < n; j++) {
             scanf("%lf", &a[i][j]);
         }
         scanf("\n");
     }
 
-    for (int ib = 0; ib < m; ib++) {
+    for (int16_t ib = 0; ib < m; ib++) {
         scanf("%lf", &b[ib]);
     }
     scanf("\n");
 
-    // for (int i = 0; i < m; i++) {
-    //     for (int j = 0; j < n; j++) {
+    // for (int16_t i = 0; i < m; i++) {
+    //     for (int16_t j = 0; j < n; j++) {
     //         printf("%10.3lf", a[i][j]);
     //     }
     //     printf("\n");
@@ -778,7 +748,7 @@ int main(int argc, char const *argv[])
     print("%.3lf\n", ans);
 
     // dealloc
-    for (int i = 0; i < m; i++) {
+    for (int16_t i = 0; i < m; i++) {
         free(a[i]);
     }
     free(a);
