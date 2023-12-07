@@ -1,0 +1,107 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <ctype.h>
+#include <string.h>
+
+#include "error.h"
+#include "poly.h"
+
+#define MOD 2048
+#define SIZE 2049
+#define MMOD 2047
+
+typedef struct poly_t {
+    int coef;
+    int exp;
+} poly_t;
+
+inline __attribute__((always_inline)) poly_t* new_poly_from_string(const char* pol) {
+    poly_t* p = calloc(SIZE, sizeof(poly_t));
+
+    const char *current = pol;
+    char token[128]; // make smaller
+    char next_char;
+    int negative = 1;
+    int coef, exp;
+
+    while (sscanf(current, "%127[^+-]", token) == 1) {
+        coef = 1;
+        exp = 0;
+        if (sscanf(token, "%dx^%d", &coef, &exp) == 2 || sscanf(token, "x^%d", &exp)) {
+            // x^ term with no coef
+        } else if (sscanf(token, "%d%c", &coef, &next_char) == 2 && next_char == 'x') {
+            exp = 1;  // x term
+        } else if (sscanf(token, "%d", &coef) == 1) {
+            // constant term
+        }
+        // } else {
+        //     exp = ((sscanf(token, "%d%c", &coef, &next_char) == 2 && next_char == 'x') || !(sscanf(token, "%d", &coef) == 1));
+        // }
+
+        // Add term to polynomial
+        p[exp & MMOD].coef = coef * negative;
+        p[exp & MMOD].exp = exp;
+        negative = 1;
+
+        // Move to the next term
+        current += strlen(token);
+        if (current[0] == '-') {
+            negative = -1;
+        }
+        //current += (*current != '\0');
+        current += !!(*current); // Skip the + or - sign
+        // current++;  
+    }
+    return p;
+}
+
+inline __attribute__((always_inline)) void free_poly(poly_t* p) {
+    free(p);
+}
+
+inline __attribute__((always_inline)) poly_t* mul(poly_t* p, poly_t* q) {
+    poly_t* r = calloc(SIZE, sizeof(poly_t));
+    int i, j, exp;
+
+    for (i = 0; i <= MOD; i++) {
+        for (j = 0; j <= MOD; j++) {
+            exp     = i + j % MOD; // p[i].exp + q[j].exp;
+            
+            r[exp & MMOD].coef += p[i].coef * q[j].coef;
+            //r[exp & MMOD].exp = exp;
+        }
+    }
+
+    return r;
+}
+
+inline __attribute__((always_inline)) void print_poly(poly_t* p) {
+    int a;
+    int first = 1;
+
+    for (int i = MOD; i >= 0; i -= 1) {
+        if (p[i].coef) {
+            if (!first) { // ^ 1
+                //if ((p[i].coef >> 31) & 1) {
+                //    printf(" - ");
+                //} else if (((p[i].coef | (~p[i].coef + 1)) >> 31) & 1) {
+                //    printf(" + ");
+                //}
+                if (p[i].coef > 0) {
+                    printf(" + ");
+                } else if (p[i].coef < 0) {
+                    printf(" - ");
+                }
+            }
+            first = 0;
+            if ((a = abs(p[i].coef)) > 1 || (a == 1 && p[i].exp == 0))
+                printf("%d", a);
+
+            if (p[i].exp > 1)
+                printf("x^%d", p[i].exp);
+            else if (p[i].exp == 1)
+                printf("x");
+        }
+    }
+    printf("\n");
+}
