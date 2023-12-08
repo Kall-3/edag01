@@ -29,6 +29,15 @@ typedef struct list_node_t list_node_t;
 simplex_t simplex_list[1000];
 node_t node_list[1000];
 
+int16_t simplex_list_idx = 0;
+int16_t node_list_idx = 0;
+
+simplex_t* simplex_free_list[1000];
+node_t* node_free_list[1000];
+
+int16_t simplex_free_list_idx = 0;
+int16_t node_free_list_idx = 0;
+
 // FUNCTION HEADERS
 double xsimplex(int16_t m, int16_t n, double** a, double* b, double* c, double* x, double y, int16_t* var, int16_t h);
 double simplex(int16_t m, int16_t n, double** a, double* b, double* c, double* x, double y);
@@ -95,7 +104,16 @@ void free_node(node_t* node) {
 }
 
 node_t* initial_node(int16_t m, int16_t n, double** a, double* b, double* c) {
-    struct node_t* p = calloc(1, sizeof(struct node_t));
+    //struct node_t* p = calloc(1, sizeof(struct node_t));
+    node_t* p;
+    if (node_free_list_idx > 0) {
+        p = node_free_list[node_free_list_idx];
+        node_free_list_idx--;
+    } else {
+        p = &node_list[node_list_idx];
+        node_list_idx++;
+    }
+
     p->a = calloc(m+1, sizeof(double*));
     for (int16_t i = 0; i < m+1; i++) {
         p->a[i] = calloc(n+1, sizeof(double));

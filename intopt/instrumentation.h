@@ -83,6 +83,7 @@
 #define BHWHT "\e[1;97m"
 #define RESET "\033[0m"
 
+#define PERFORMANCE
 #ifdef PERFORMANCE
 
 #  define NS_PER_SECOND 1000000000

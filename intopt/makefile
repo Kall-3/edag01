@@ -16,6 +16,12 @@ main: clean $(OBJS)
 	rm -f score
 	./a.out -t 4
 
+record:
+	sudo perf record -F 10000 -g ./a.out < test/20/0/11637000/i
+	sudo perf script | ./FlameGraph/stackcollapse-perf.pl > out.perf-folded
+	./FlameGraph/flamegraph.pl out.perf-folded > perf.svg
+	google-chrome-stable perf.svg
+
 # Rule to run the test
 test: build
 	@if [ -z "$(INPUT_DIR)" ]; then \
