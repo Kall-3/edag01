@@ -4,19 +4,16 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "instrumentation.h"
-#define PERFORMANCE
-
 #define print(...) printf(__VA_ARGS__)
 
 #define M 64
-#define N 64
+#define N 32
 
 // TODO:
 // Priority queue (binary heap)
 // Free list
 // Cashe alloc
-// int16_t for int
+// int for int
 // Float for double, calculate z as c * x and keep track of c
 
 // degub ldb
@@ -26,27 +23,15 @@ typedef struct simplex_t simplex_t;
 typedef struct node_t node_t;
 typedef struct list_node_t list_node_t;
 
-simplex_t simplex_list[1000];
-node_t node_list[1000];
-
-int16_t simplex_list_idx = 0;
-int16_t node_list_idx = 0;
-
-simplex_t* simplex_free_list[1000];
-node_t* node_free_list[1000];
-
-int16_t simplex_free_list_idx = 0;
-int16_t node_free_list_idx = 0;
-
 // FUNCTION HEADERS
-double xsimplex(int16_t m, int16_t n, double** a, double* b, double* c, double* x, double y, int16_t* var, int16_t h);
-double simplex(int16_t m, int16_t n, double** a, double* b, double* c, double* x, double y);
+double xsimplex(int m, int n, double** a, double* b, double* c, double* x, double y, int* var, int h);
+double simplex(int m, int n, double** a, double* b, double* c, double* x, double y);
 
 // STRUCTS
 struct simplex_t {
-    int16_t m;          /* Constraints. */
-    int16_t n;          /* Decision variables. */
-    int16_t* var;       /* var[n+m+1] 0..n-1 are nonbasic. */
+    int m;          /* Constraints. */
+    int n;          /* Decision variables. */
+    int* var;       /* var[n+m+1] 0..n-1 are nonbasic. */
     double** a;     /* A. */
     double* b;      /* b. */
     double* x;      /* x[n+1] x. */
@@ -55,10 +40,10 @@ struct simplex_t {
 };
 
 struct node_t {
-    int16_t m;          /* Constraints. */
-    int16_t n;          /* Decision variables. */
-    int16_t k;          /* Parent branches on x_k. */
-    int16_t h;          /* Branch on x_h. */
+    int m;          /* Constraints. */
+    int n;          /* Decision variables. */
+    int k;          /* Parent branches on x_k. */
+    int h;          /* Branch on x_h. */
     double xh;      /* x_h. */
     double ak;      /* Parent a_k. */
     double bk;      /* Parent b_k. */
@@ -77,9 +62,21 @@ struct list_node_t {
     node_t* data;
 };
 
+simplex_t simplex_list[10000];
+node_t node_list[10000];
+
+int simplex_list_idx = 0;
+int node_list_idx = 0;
+
+simplex_t* simplex_free_list[10000];
+node_t* node_free_list[10000];
+
+int simplex_free_list_idx = 0;
+int node_free_list_idx = -1;
+
 //FREE FUNCTIONS
 void free_simplex(simplex_t* simplex) {
-    for (int16_t i = 0; i < simplex->m; i++) {
+    for (int i = 0; i < simplex->m; i++) {
         free(simplex->a[i]);
     }
     free(simplex->a);
@@ -90,51 +87,122 @@ void free_simplex(simplex_t* simplex) {
     free(simplex);
 }
 
-void free_node(node_t* node) {
-    for (int16_t i = 0; i < node->m+1; i++) {
-        free(node->a[i]);
+// void free_node(node_t* node) {
+//     for (int i = 0; i < node->m+1; i++) {
+//         free(node->a[i]);
+//     }
+//     free(node->a);
+//     free(node->b);
+//     free(node->c);
+//     free(node->x);
+//     free(node->min);
+//     free(node->max);
+//     free(node);
+// }
+
+void free_node_abcx(node_t* node) {
+    // for (int i = 0; i < M; i++) {
+    //     free(node->a[i]);
+    // }
+    // free(node->a);
+    // free(node->b);
+    // free(node->c);
+    // free(node->x);
+
+    for (int i = 0; i < M; i++) {
+        memset(node->a[i], 0, N * sizeof(double));
     }
-    free(node->a);
-    free(node->b);
-    free(node->c);
-    free(node->x);
-    free(node->min);
-    free(node->max);
-    free(node);
+    // memset(node->b, 0, N * sizeof(double));
+    // memset(node->c, 0, N * sizeof(double));
+    // memset(node->x, 0, N * sizeof(double));
 }
 
-node_t* initial_node(int16_t m, int16_t n, double** a, double* b, double* c) {
-    //struct node_t* p = calloc(1, sizeof(struct node_t));
+void free_node_minmax(node_t* node) {
+    // node->a = calloc(M, sizeof(double*));
+    // for (int i = 0; i < M; i++) {
+    //     node->a[i] = calloc(N, sizeof(double));
+    // }
+    // node->b = calloc(M, sizeof(double));
+    // node->c = calloc(N, sizeof(double));
+    // node->x = calloc(N, sizeof(double));
+
+    // free(node->min);
+    // free(node->max);
+
+    // memset(node->min, 0, N * sizeof(double));
+    // memset(node->max, 0, N * sizeof(double));
+
+    node_free_list_idx++;
+    node_free_list[node_free_list_idx] = node;
+}
+
+void free_freelist() {
+    for (int i = 0; i < node_list_idx; i++) {
+        node_t node = node_list[i];
+        for (int j = 0; j < M; j++) {
+            free(node.a[j]);
+        }
+        free(node.a);
+        free(node.b);
+        free(node.c);
+        free(node.x);
+        free(node.min);
+        free(node.max);
+    }
+}
+
+node_t* get_node() {
     node_t* p;
-    if (node_free_list_idx > 0) {
+    if (node_free_list_idx >= 0) {
         p = node_free_list[node_free_list_idx];
         node_free_list_idx--;
     } else {
+        if (node_list_idx >= 10000) {
+            printf("EXIT i > 10000\n");
+            exit(1);
+        }
         p = &node_list[node_list_idx];
+        // Allocate memory for node
+        p->a = calloc(M, sizeof(double*));
+        for (int i = 0; i < M; i++) {
+            p->a[i] = calloc(N, sizeof(double));
+        }
+        p->b = calloc(M, sizeof(double));
+        p->c = calloc(N, sizeof(double));
+        p->x = calloc(N, sizeof(double));
+        p->min = calloc(N, sizeof(double));
+        p->max = calloc(N, sizeof(double));
         node_list_idx++;
     }
+    return p;
+}
 
-    p->a = calloc(m+1, sizeof(double*));
-    for (int16_t i = 0; i < m+1; i++) {
-        p->a[i] = calloc(n+1, sizeof(double));
-    }
+// inline ?
+node_t* initial_node(int m, int n, double** a, double* b, double* c) {
+    //struct node_t* p = calloc(1, sizeof(struct node_t));
+    node_t* p = get_node();
 
-    p->b = calloc(m+1, sizeof(double));
-    p->c = calloc(n+1, sizeof(double));
-    p->x = calloc(n+1, sizeof(double));
-    p->min = calloc(n, sizeof(double));
-    p->max = calloc(n, sizeof(double));
+    // p->a = calloc(m+1, sizeof(double*));
+    // for (int i = 0; i < m+1; i++) {
+    //     p->a[i] = calloc(n+1, sizeof(double));
+    // }
+
+    // p->b = calloc(m+1, sizeof(double));
+    // p->c = calloc(n+1, sizeof(double));
+    // p->x = calloc(n+1, sizeof(double));
+    // p->min = calloc(n, sizeof(double));
+    // p->max = calloc(n, sizeof(double));
     p->m = m;
     p->n = n;
 
-    for (int16_t i = 0; i < m; i++) {
-        for (int16_t j = 0; j < n; j++) {
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < n; j++) {
             p->a[i][j] = a[i][j];
         }
         p->b[i] = b[i];
     }
 
-    for (int16_t i = 0; i < n; i++) {
+    for (int i = 0; i < n; i++) {
         p->c[i] = c[i];
         p->min[i] = -INFINITY;
         p->max[i] = INFINITY;
@@ -143,9 +211,10 @@ node_t* initial_node(int16_t m, int16_t n, double** a, double* b, double* c) {
     return p;
 }
 
-node_t* extend(node_t* p, int16_t m, int16_t n, double** a, double* b, double* c, int16_t k, double ak, double bk) {
-    struct node_t* q = calloc(1, sizeof(struct node_t));
-    int16_t i, j;
+node_t* extend(node_t* p, int m, int n, double** a, double* b, double* c, int k, double ak, double bk) {
+    //struct node_t* q = calloc(1, sizeof(struct node_t));
+    struct node_t* q = get_node();
+    int i, j;
     q->k = k;
     q->ak = ak;
     q->bk = bk;
@@ -161,16 +230,16 @@ node_t* extend(node_t* p, int16_t m, int16_t n, double** a, double* b, double* c
     q->n = p->n;
     q->h = -1;
 
-    q->a = calloc(q->m+1, sizeof(double*));
-    for (int16_t i = 0; i < q->m+1; i++) {
-        q->a[i] = calloc(q->n+1, sizeof(double));
-    }
+    // q->a = calloc(q->m+1, sizeof(double*));
+    // for (int i = 0; i < q->m+1; i++) {
+    //     q->a[i] = calloc(q->n+1, sizeof(double));
+    // }
 
-    q->b = calloc(q->m+1, sizeof(double));
-    q->c = calloc(q->n+1, sizeof(double));
-    q->x = calloc(q->n+1, sizeof(double));
-    q->min = calloc(n, sizeof(double));
-    q->max = calloc(n, sizeof(double));
+    // q->b = calloc(q->m+1, sizeof(double));
+    // q->c = calloc(q->n+1, sizeof(double));
+    // q->x = calloc(q->n+1, sizeof(double));
+    // q->min = calloc(n, sizeof(double));
+    // q->max = calloc(n, sizeof(double));
 
     for (i = 0; i < p->n; i++) {
         q->min[i] = p->min[i];
@@ -208,6 +277,9 @@ node_t* extend(node_t* p, int16_t m, int16_t n, double** a, double* b, double* c
             i += 1;
         }
     }
+    // memset(q->x, 0, N * sizeof(double));
+    // q->xh = 0;
+    // q->z = 0;
     
     return q;
 }
@@ -224,7 +296,7 @@ int is_integer(double* xp) {
 }
 
 int integer(node_t* p) {
-    for (int16_t i = 0; i < p->n; i++) {
+    for (int i = 0; i < p->n; i++) {
         if (!is_integer(&p->x[i])) {
             return 0;
         }
@@ -236,7 +308,7 @@ void bound(node_t* p, list_node_t** h, double* zp, double* x) {
     if (p->z > *zp) {
         *zp = p->z;
 
-        for (int16_t i = 0; i < p->n; i++) {
+        for (int i = 0; i < p->n; i++) {
             p->x[i] = x[i];
         }
 
@@ -249,25 +321,15 @@ void bound(node_t* p, list_node_t** h, double* zp, double* x) {
                 } else {
                     (*h) = h_q->next;
                 }
-
                 if (h_q->next != NULL) {
                     h_q->next->prev = h_q->prev;
                 }
-                free(h_q->data->min);
-                free(h_q->data->max);
-                free(h_q->data);
+                free_node_minmax(h_q->data);
                 free(h_q);
             }
             h_q = next;
         }
     }
-}
-
-double double_fraction(double fraction) {
-    double integer_part = 0;
-    double fractional_part;
-    integer_part = modf(fraction, &fractional_part);
-    return integer_part;
 }
 
 int branch(node_t* q, double z) {
@@ -278,12 +340,10 @@ int branch(node_t* q, double z) {
     }
 
     double integer_part = 0;
-    int16_t best_h = 0;
+    int best_h = 0;
     double best_fractional = INFINITY;
-    for (int16_t h = 0; h < q->n; h++) {
+    for (int h = 0; h < q->n; h++) {
         if (!is_integer(&q->x[h])) {
-            // fabs(modf(q->x[h], &integer_part) - 0.5) < 0.1
-            // printf("TEST: %lf %lf\n", q->x[h], modf(q->x[h], &integer_part));
             if (q->min[h] == -INFINITY) {
                 min = 0;
             } else {
@@ -305,20 +365,14 @@ int branch(node_t* q, double z) {
         q->h = best_h;
         q->xh = q->x[best_h];
 
-        for (int16_t i = 0; i < q->m+1; i++) {
-            free(q->a[i]);
-        }
-        free(q->a);
-        free(q->b);
-        free(q->c);
-        free(q->x);
+        free_node_abcx(q);
         return 1;
     }
     
     return 0;
 }
 
-void succ(node_t* p, list_node_t** h, int16_t m, int16_t n, double** a, double* b, double* c, int16_t k, int16_t ak, int16_t bk, double* zp, double* x) {
+void succ(node_t* p, list_node_t** h, int m, int n, double** a, double* b, double* c, int k, int ak, int bk, double* zp, double* x) {
     node_t* q = extend(p, m, n, a, b, c, k, ak, bk);
     if (q == NULL) {
         return;
@@ -340,11 +394,12 @@ void succ(node_t* p, list_node_t** h, int16_t m, int16_t n, double** a, double* 
             return;
         }
     }
-    free_node(q);
+    free_node_abcx(q);
+    free_node_minmax(q);
 }
 
-int init(simplex_t* s, int16_t m, int16_t n, double** a, double* b, double* c, double* x, double y, int16_t* var) {
-    int16_t i, k;
+int init(simplex_t* s, int m, int n, double** a, double* b, double* c, double* x, double y, int* var) {
+    int i, k;
 
     s->m = m;
     s->n = n;
@@ -356,7 +411,7 @@ int init(simplex_t* s, int16_t m, int16_t n, double** a, double* b, double* c, d
     s->var = var;
 
     if(s->var == NULL){
-        s->var = calloc(m+n+1, sizeof(int16_t));
+        s->var = calloc(m+n+1, sizeof(int));
         for (i=0; i < m + n; i++){
             s->var[i] = i;
         }
@@ -372,7 +427,7 @@ int init(simplex_t* s, int16_t m, int16_t n, double** a, double* b, double* c, d
 }
 
 int select_nonbasic(simplex_t s) {
-    // for (int16_t i = 0; i < s.n; i++) {
+    // for (int i = 0; i < s.n; i++) {
     //     if (s.c[i] > 1e-6) {
     //         return i;
     //     }
@@ -380,8 +435,8 @@ int select_nonbasic(simplex_t s) {
     // return -1;
 
     // Max c[i]:
-    int16_t idx_max = 0;
-    for (int16_t i = 1; i < s.n; i++) {
+    int idx_max = 0;
+    for (int i = 1; i < s.n; i++) {
         if (s.c[i] > 1e-6 && s.c[i] > s.c[idx_max]) {
             idx_max = i;
         }
@@ -392,10 +447,10 @@ int select_nonbasic(simplex_t s) {
 
     // Steepest edge
     // double max_edge = -1;
-    // int16_t idx_max = 0;
-    // for (int16_t i = 0; i < s.n; i++) {
+    // int idx_max = 0;
+    // for (int i = 0; i < s.n; i++) {
     //     double sum = 0;
-    //     for (int16_t j = 0; j < s.m; j++) {
+    //     for (int j = 0; j < s.m; j++) {
     //         sum += pow(s.a[j][i], 2);
     //     }
     //     sum = s.c[i] / sqrt(sum + 1);
@@ -413,18 +468,18 @@ int select_nonbasic(simplex_t s) {
 }
 
 // inline __attribute__((always_inline))
-void pivot(simplex_t* s, int16_t row, int16_t col) {
+void pivot4(simplex_t* s, int row, int col) {
     //BENCHMARK_BEGIN(pivot);
     double** a = s->a;
     double* b = s->b;
     double* c = s->c;
-    int16_t m = s->m;
-    int16_t n = s->n;
-    int16_t i, j, t;
+    int m = s->m;
+    int n = s->n;
+    int i, j, t;
 
     double a_rc = 1/a[row][col];
 
-    // const int16_t FOLDS = 4;
+    // const int FOLDS = 4;
     
     t = s->var[col];
     s->var[col] = s->var[n+row];
@@ -507,10 +562,106 @@ void pivot(simplex_t* s, int16_t row, int16_t col) {
     //BENCHMARK_END_INTERVALL(pivot, 100000);
 }
 
-void prepare(simplex_t* s, int16_t k) {
-    int16_t m = s->m;
-    int16_t n = s->n;
-    int16_t i;
+void pivot8(simplex_t* s, int row, int col) {
+    //BENCHMARK_BEGIN(pivot);
+    double** a = s->a;
+    double* b = s->b;
+    double* c = s->c;
+    int m = s->m;
+    int n = s->n;
+    int i, j, t;
+
+    double a_rc = 1/a[row][col];
+
+    // const int FOLDS = 4;
+    
+    t = s->var[col];
+    s->var[col] = s->var[n+row];
+    s->var[n+row] = t;
+    s->y = s->y + c[col] * b[row] * a_rc;
+
+    //for (i = 0; i < col; i++) {
+    //    c[i] = c[i] - c[col] * a[row][i] * a_rc;
+    //}
+    //for (i = col + 1; i < n; i++) {
+    //    c[i] = c[i] - c[col] * a[row][i] * a_rc;
+    //}
+    double c_temp = c[col];
+    #pragma GCC unroll(8)
+    for (i = 0; i < n; i++) {
+        c[i] = c[i] - c_temp * a[row][i] * a_rc;
+    }
+    c[col] = c_temp;
+    c[col] = -c[col] * a_rc;
+
+    
+    // for (i = 0; i < row; i++) {
+    //     b[i] = b[i] - a[i][col] * b[row] * a_rc;
+    // }
+    // for (i = row + 1; i < m; i++) {
+    //     b[i] = b[i] - a[i][col] * b[row] * a_rc;
+    // }
+    double b_temp = b[row];
+    #pragma GCC unroll(8)
+    for (i = 0; i < m; i++) {
+        b[i] = b[i] - a[i][col] * b_temp * a_rc;
+    }
+    b[row] = b_temp;
+
+    //for (i = 0; i < row; i++) {
+    //    for (j = 0; j < col; j++) {
+    //        a[i][j] = a[i][j] - a[i][col] * a[row][j] * a_rc;
+    //    }
+    //    for (j = col + 1; j < n; j++) {
+    //        a[i][j] = a[i][j] - a[i][col] * a[row][j] * a_rc;
+    //    }
+    //}
+    //for (i = row + 1; i < m; i++) {
+    //    for (j = 0; j < col; j++) {
+    //        a[i][j] = a[i][j] - a[i][col] * a[row][j] * a_rc;
+    //    }
+    //    for (j = col + 1; j < n; j++) {
+    //        a[i][j] = a[i][j] - a[i][col] * a[row][j] * a_rc;
+    //    }
+    //}
+    for (i = 0; i < row; i++) {
+        double a_temp = a[i][col];
+        #pragma GCC unroll(8)
+        for (j = 0; j < n; j++) {
+            a[i][j] = a[i][j] - a_temp * a[row][j] * a_rc;
+        }
+        a[i][col] = a_temp;
+    }
+    for (i = row + 1; i < m; i++) {
+        double a_temp = a[i][col];
+        #pragma GCC unroll(8)
+        for (j = 0; j < n; j++) {
+            a[i][j] = a[i][j] - a_temp * a[row][j] * a_rc;
+        }
+        a[i][col] = a_temp;
+    }
+
+    double temp_a = a[row][col];
+    for (i = 0; i < m; i++) {
+        a[i][col] = -a[i][col] * a_rc;
+    }
+    a[row][col] = temp_a;
+
+    for (i = 0; i < n; i++) {
+        a[row][i] = a[row][i] * a_rc;
+    }
+    a[row][col] = temp_a;
+    b[row] = b[row] * a_rc;
+    a[row][col] = 1 * a_rc;
+    //BENCHMARK_END_INTERVALL(pivot, 100000);
+}
+
+void (*pivot)(simplex_t*, int, int);
+
+void prepare(simplex_t* s, int k) {
+    int m = s->m;
+    int n = s->n;
+    int i;
 
     for (i = m+n; i > n; i--) {
         s->var[i] = s->var[i-1];
@@ -530,8 +681,8 @@ void prepare(simplex_t* s, int16_t k) {
     pivot(s, k, n-1);
 }
 
-int initial(simplex_t* s, int16_t m, int16_t n, double** a, double* b, double* c, double* x, double y, int16_t* var) {
-    int16_t i, j, k;
+int initial(simplex_t* s, int m, int n, double** a, double* b, double* c, double* x, double y, int* var) {
+    int i, j, k;
     double w;
     k = init(s, m, n, a, b, c, x, y, var);
 
@@ -619,9 +770,9 @@ int initial(simplex_t* s, int16_t m, int16_t n, double** a, double* b, double* c
     return 1;
 }
 
-double xsimplex(int16_t m, int16_t n, double** a, double* b, double* c, double* x, double y, int16_t* var, int16_t h) {
+double xsimplex(int m, int n, double** a, double* b, double* c, double* x, double y, int* var, int h) {
     simplex_t s;
-    int16_t i, row, col;
+    int i, row, col;
 
     if (!initial(&s, m, n, a, b, c, x, y, var)) {
         free(s.var);
@@ -668,11 +819,30 @@ double xsimplex(int16_t m, int16_t n, double** a, double* b, double* c, double* 
     return s.y;
 }
 
-double simplex(int16_t m, int16_t n, double** a, double* b, double* c, double* x, double y) {
+double simplex(int m, int n, double** a, double* b, double* c, double* x, double y) {
     return xsimplex(m, n, a, b, c, x, y, NULL, 0);
 }
+#include <signal.h>
+#include <unistd.h>
 
-double intopt(int16_t m, int16_t n, double** a, double* b, double* c, double* x) {
+int register_exit = 1;
+
+void free_at_termination() {
+    free_freelist();
+}
+
+double intopt(int m, int n, double** a, double* b, double* c, double* x) {
+    //if (register_exit) {
+    //    atexit(free_at_termination);
+    //    register_exit = 0;
+    //}
+    if (n >= 8) {
+        pivot = &pivot8;
+    } else {
+        pivot = &pivot4;
+    }
+    node_list_idx = 0;
+    node_free_list_idx = -1;
     node_t* p = initial_node(m, n, a, b, c);
     list_node_t* h = calloc(1, sizeof(struct list_node_t));
     h->data = p;
@@ -682,10 +852,13 @@ double intopt(int16_t m, int16_t n, double** a, double* b, double* c, double* x)
     if (integer(p) || !isfinite(p->z)) {
         z = p->z;
         if (integer(p)) {
-            for (int16_t i = 0; i < p->n; i++) {
+            for (int i = 0; i < p->n; i++) {
                 x[i] = p->x[i];
             }
-            free_node(p);
+            free_node_abcx(p);
+            free_node_minmax(p);
+            // Free freelist
+            //free_freelist();
             free(h);
             return z;
         }
@@ -702,10 +875,10 @@ double intopt(int16_t m, int16_t n, double** a, double* b, double* c, double* x)
 
         succ(p, &h, m, n, a, b, c, p->h, 1, floor(p->xh), &z, x);
         succ(p, &h, m, n, a, b, c, p->h, -1, -ceil(p->xh), &z, x);
-        free(p->min);
-        free(p->max);
-        free(p);
+        free_node_minmax(p);
     }
+    // Free freelist
+    //free_freelist();
     if (z == -INFINITY) {
         return NAN;
     } else {
@@ -713,44 +886,45 @@ double intopt(int16_t m, int16_t n, double** a, double* b, double* c, double* x)
     }
 }
 
+
 // #define INCLUDE_MAIN
 #ifdef INCLUDE_MAIN
 int main(int argc, char const *argv[])
 {
-    int16_t m;
-    int16_t n;
+    int m;
+    int n;
 
     scanf("%d %d\n", &m, &n);
     // printf("m = %d, n = %d\n", m, n);
 
     double** a;
     a = calloc(m, sizeof(double*));
-    for (int16_t i = 0; i < m; i++) {
+    for (int i = 0; i < m; i++) {
         a[i] = calloc(n+1, sizeof(double));
     }
 
     double* c = calloc(n, sizeof(double));
     double* b = calloc(m, sizeof(double));
     
-    for (int16_t ic = 0; ic < n; ic++) {
+    for (int ic = 0; ic < n; ic++) {
         scanf("%lf", &c[ic]);
     }
     scanf("\n");
 
-    for (int16_t i = 0; i < m; i++) {
-        for (int16_t j = 0; j < n; j++) {
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < n; j++) {
             scanf("%lf", &a[i][j]);
         }
         scanf("\n");
     }
 
-    for (int16_t ib = 0; ib < m; ib++) {
+    for (int ib = 0; ib < m; ib++) {
         scanf("%lf", &b[ib]);
     }
     scanf("\n");
 
-    // for (int16_t i = 0; i < m; i++) {
-    //     for (int16_t j = 0; j < n; j++) {
+    // for (int i = 0; i < m; i++) {
+    //     for (int j = 0; j < n; j++) {
     //         printf("%10.3lf", a[i][j]);
     //     }
     //     printf("\n");
@@ -766,13 +940,13 @@ int main(int argc, char const *argv[])
     print("%.3lf\n", ans);
 
     // dealloc
-    for (int16_t i = 0; i < m; i++) {
+    for (int i = 0; i < m; i++) {
         free(a[i]);
     }
     free(a);
     free(b);
-    // free(c);
-    // free(x);
+    free(c);
+    free(x);
 
     return 0;
 }
