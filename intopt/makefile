@@ -12,12 +12,13 @@ LDFLAGS		= -g -O3 -pthread -lm
 OBJS		= intopt.o main.o error.o
 
 main: clean $(OBJS)
-	$(CC) $(OBJS) $(LDFLAGS) -DPERFORMANCE
+	$(CC) $(OBJS) $(LDFLAGS)
 	rm -f score
 	./a.out -t 4
 
 record:
-	sudo perf record -F 10000 -g ./a.out < test/20/0/11637000/i
+	#sudo perf record -F 10000 -g ./a.out < test/20/0/11637000/i
+	sudo perf record -F 10000 -g ./a.out < test/4/1001299000/i
 	sudo perf script | ./FlameGraph/stackcollapse-perf.pl > out.perf-folded
 	./FlameGraph/flamegraph.pl out.perf-folded > perf.svg
 	google-chrome-stable perf.svg
@@ -28,7 +29,7 @@ test: build
 		echo "ERROR: INPUT_DIR is not set. Usage: make test INPUT_DIR=<path>"; \
 		exit 1; \
 	fi
-	./a.out -t 4 $(INPUT_DIR)/i > sol
+	./a.out $(INPUT_DIR)/i > sol
 	diff sol <(head -n 1 $(INPUT_DIR)/intopt.sol)
 
 # Rule to clean build
